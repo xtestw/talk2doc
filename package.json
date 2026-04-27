@@ -1,0 +1,28 @@
+{
+  "name": "talk2doc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "把 YouTube 对话视频流式生成中文杂志体长文",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tests/smoke-credits.ts && tsx tests/smoke-asr-fallback.ts",
+    "test:credits": "tsx tests/smoke-credits.ts",
+    "test:asr": "tsx tests/smoke-asr-fallback.ts",
+    "test:youtube": "tsx tests/smoke-youtube.ts",
+    "test:agent": "tsx tests/smoke-agent.ts",
+    "db:create": "wrangler d1 create talk2doc",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250424.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.9.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.114.0"
+  }
+}

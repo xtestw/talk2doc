@@ -1,0 +1,22 @@
+# Talk2Doc 本地开发用环境变量；复制为 .dev.vars（已被 .gitignore 忽略）。
+# 生产部署用 `wrangler secret put <KEY>`，不要把这个文件直接 push 到生产。
+
+# === LLM ===
+GEMINI_API_KEY=
+DEEPSEEK_API_KEY=
+
+# === Google OAuth（Auth 必填） ===
+# 在 https://console.cloud.google.com/apis/credentials 创建 OAuth 2.0 客户端
+# 授权回调 URI 形如：http://localhost:8787/api/auth/google/callback
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# === Session（JWT 签名密钥；至少 32 字节随机） ===
+# 生成：openssl rand -hex 32
+SESSION_SECRET=
+
+# === Stripe（Billing 必填） ===
+# 测试 key 形如 sk_test_...
+STRIPE_SECRET_KEY=
+# Webhook 端点签名密钥（在 stripe dashboard webhook 设置里复制）
+STRIPE_WEBHOOK_SECRET=

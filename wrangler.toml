@@ -1,0 +1,30 @@
+name = "talk2doc"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# === 非敏感运行配置（敏感 secret 走 wrangler secret put / .dev.vars） ===
+[vars]
+GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_LLM_PROVIDER = "gemini"
+PRICING_PER_MINUTE_CREDITS = "1"
+SIGNUP_BONUS_CREDITS = "0"
+TOPUP_PACKAGES_JSON = '[{"id":"starter","label":"入门 100 积分","cents":100,"credits":100,"currency":"usd"},{"id":"plus","label":"加量 500 积分","cents":400,"credits":500,"currency":"usd"},{"id":"pro","label":"专业 1500 积分","cents":1000,"credits":1500,"currency":"usd"}]'
+APP_BASE_URL = "https://talk2doc.xuwei8091.workers.dev"
+
+# === Cloudflare AI（Whisper 走这里） ===
+[ai]
+binding = "AI"
+
+# === D1 数据库（账户/积分/账单/ASR 任务） ===
+[[d1_databases]]
+binding = "DB"
+database_name = "talk2doc"
+database_id = "6777dd16-6be1-45e6-ad3c-529dba04dd0b"
+migrations_dir = "migrations"
+
+# === Markdown 作为模块导入（prompt 进 MD 后由打包期内联） ===
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = true
