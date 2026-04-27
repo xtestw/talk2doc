@@ -203,9 +203,11 @@ export const APP_SCRIPT = /* javascript */ `
   const statusEl = $("#status");
   const metaEl = $("#meta");
   const tabsWrap = $("#viewbar");
+  const downloadSubtitleBtn = $("#download-subtitle");
   const articleAll = $("#article-all");
   const articleA = $("#article-a");
   const articleB = $("#article-b");
+  let subtitleText = "";
 
   // 高级设置回填
   const providerInputs = Array.from(document.querySelectorAll('input[name="provider"]'));
@@ -294,6 +296,9 @@ export const APP_SCRIPT = /* javascript */ `
     try { data = JSON.parse(raw); } catch {}
     if (kind === "status") {
       statusEl.textContent = String(data || "");
+    } else if (kind === "subtitle") {
+      subtitleText = String(data || "").trim();
+      if (downloadSubtitleBtn) downloadSubtitleBtn.hidden = !subtitleText;
     } else if (kind === "chunk") {
       buffer += String(data || "");
       scheduleRender();
@@ -394,6 +399,8 @@ export const APP_SCRIPT = /* javascript */ `
     if (!url) { showToast("请输入 YouTube 链接"); return; }
 
     buffer = "";
+    subtitleText = "";
+    if (downloadSubtitleBtn) downloadSubtitleBtn.hidden = true;
     scheduleRender();
     setBusy(true);
     setStreaming(true);
@@ -437,6 +444,23 @@ export const APP_SCRIPT = /* javascript */ `
       scheduleRender();
     }
   });
+  if (downloadSubtitleBtn) {
+    downloadSubtitleBtn.addEventListener("click", () => {
+      if (!subtitleText) {
+        showToast("当前没有可下载的字幕");
+        return;
+      }
+      const blob = new Blob([subtitleText + "\\n"], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "subtitle.txt";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+  }
 
   // 充值结果回流
   const params = new URLSearchParams(location.search);

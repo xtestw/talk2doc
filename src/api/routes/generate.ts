@@ -50,7 +50,7 @@ export const generate: Handler = withAuth(async (req, ctx) => {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(ctrl) {
-      const send = (k: "status" | "chunk" | "error" | "done", d: string) =>
+      const send = (k: "status" | "chunk" | "subtitle" | "error" | "done", d: string) =>
         ctrl.enqueue(encodeEvent(k, d));
 
       try {
@@ -72,6 +72,7 @@ export const generate: Handler = withAuth(async (req, ctx) => {
         if (transcript.frames.length === 0) {
           send("status", "无关键帧 sprite，已退化为纯字幕模式");
         }
+        send("subtitle", transcript.subtitle);
 
         for await (const ev of ArticleAgent.run({
           transcript,

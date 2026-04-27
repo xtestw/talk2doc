@@ -2,9 +2,9 @@
 //   event: <kind>
 //   data: <JSON-encoded string>
 //   \n
-// kind ∈ "status" | "chunk" | "error" | "done"
+// kind ∈ "status" | "chunk" | "subtitle" | "error" | "done"
 
-export type SseKind = "status" | "chunk" | "error" | "done";
+export type SseKind = "status" | "chunk" | "subtitle" | "error" | "done";
 
 const enc = new TextEncoder();
 

@@ -64,6 +64,7 @@ const BODY = /* html */ `
       <button class="tab-btn" data-view="a" type="button" role="tab">A 版（口播感）</button>
       <button class="tab-btn" data-view="b" type="button" role="tab" disabled>B 版（可发布）</button>
     </div>
+    <button id="download-subtitle" class="secondary" type="button" hidden>下载字幕</button>
   </div>
 
   <article id="article-all" class="empty"></article>
