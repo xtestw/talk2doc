@@ -8,8 +8,8 @@
 // state 用 HMAC 防 CSRF：state = `${nonce}.${HMAC(SESSION_SECRET, nonce)}`，并把 nonce 写到短期 cookie。
 // callback 校验三件：cookie 里的 nonce ≡ url state 前半段、url state HMAC 通过、code 兑换成功。
 
-import { hmacSha256Hex, timingSafeEqual } from "../../core/hmac";
-import { newId } from "../../core/id";
+import { hmacSha256Hex, timingSafeEqual } from "../../core/security/hmac";
+import { newId } from "../../core/utils/id";
 import {
   buildAuthUrl,
   exchangeCodeForUser,

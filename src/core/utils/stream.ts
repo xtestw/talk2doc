@@ -14,4 +14,3 @@ export async function drainText(stream: ReadableStream<string>): Promise<string>
   }
   return out;
 }
-

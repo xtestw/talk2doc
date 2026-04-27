@@ -3,15 +3,15 @@
 // B: LLM + 字幕（禁用视觉，规避 vision endpoint 兼容问题）
 // C: 启发式规则（标题/字幕关键词）兜底
 //
-// 通过 core/fallback 统一封装，避免 if/else 级联膨胀。
+// 通过 core/execution/fallback 统一封装，避免 if/else 级联膨胀。
 
 import type { LLMAdapter } from "../../infra/llm/types";
 import type { TranscriptResult } from "../../infra/transcript/types";
 import { SPEAKER_ID_SYSTEM_PROMPT, buildSpeakerIdUserPrompt } from "./prompts";
 import type { Participant, SpeakerManifest } from "./types";
-import { extractFirstJsonObject } from "../../core/json";
-import { runWithFallback, type FallbackStrategy } from "../../core/fallback";
-import { drainText } from "../../core/stream";
+import { extractFirstJsonObject } from "../../core/utils/json";
+import { runWithFallback, type FallbackStrategy } from "../../core/execution/fallback";
+import { drainText } from "../../core/utils/stream";
 
 export interface IdentifyOptions {
   transcript: TranscriptResult;

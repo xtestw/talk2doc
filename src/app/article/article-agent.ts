@@ -1,16 +1,18 @@
 // ArticleAgent · 项目核心
 // 两阶段流程：
 //   1. 角色识别：从字幕（+ 可选关键帧 sprite）推断参与者真实姓名 → SpeakerManifest
-//   2. 正文撰写：把 manifest 当作权威发言人标签注入 prompt，流式生成杂志体长文
+//   2. 正文撰写：把 manifest 当作权威发言人标签注入 prompt，流式生成文章正文
 // 仅产出 AgentEvent 事件，不关心 SSE/HTTP，由上层 api 层翻译为网络协议。
 
 import type { Agent, AgentEvent, AgentInput, SpeakerManifest } from "./types";
 import {
+  CHAPTER_PLAN_SYSTEM_PROMPT,
   PUBLISH_SYSTEM_PROMPT,
-  SPOKEN_SYSTEM_PROMPT,
+  buildChapterPlanUserPrompt,
   buildUserPrompt,
 } from "./prompts";
 import { identifySpeakers } from "./speaker-id";
+import { drainText } from "../../core/utils/stream";
 
 export const ArticleAgent: Agent = {
   id: "article",
@@ -65,24 +67,31 @@ export const ArticleAgent: Agent = {
         `（置信度 ${manifest.confidence}${manifest.vision ? "·含视觉" : "·纯字幕"}）`,
     };
 
-    // ============ 阶段 2：双版本正文（流式） ============
-    yield { kind: "status", message: `${llm.displayName} 正在生成 A版（原始口播感）…` };
-    yield { kind: "chunk", text: "# A版｜原始口播感\n\n" };
-    const userPrompt = buildUserPrompt(effective, manifest);
-    const aErr = yield* streamOne({
-      input,
-      llm,
-      systemPrompt: SPOKEN_SYSTEM_PROMPT,
-      userPrompt,
-      images: effective.frames,
-    });
-    if (aErr) {
-      yield { kind: "error", message: aErr };
-      return;
+    // ============ 阶段 2：内容聚类与章节规划 ============
+    let chapterPlan = "";
+    try {
+      yield { kind: "status", message: "正在做话题聚类并生成章节规划…" };
+      const chapterPlanStream = await llm.stream({
+        systemPrompt: CHAPTER_PLAN_SYSTEM_PROMPT,
+        userPrompt: buildChapterPlanUserPrompt(effective, manifest),
+        images: effective.frames,
+        apiKey: input.apiKey,
+        model: input.model,
+        baseUrl: input.baseUrl,
+        signal: input.signal,
+      });
+      chapterPlan = (await drainText(chapterPlanStream)).trim();
+      if (chapterPlan) {
+        yield { kind: "status", message: "章节规划完成，将用于后续逐章重构" };
+      }
+    } catch {
+      chapterPlan = "";
     }
 
-    yield { kind: "status", message: `${llm.displayName} 正在生成 B版（可发布文章）…` };
-    yield { kind: "chunk", text: "\n\n---\n\n# B版｜可发布文章\n\n" };
+    // ============ 阶段 3：正文生成（流式） ============
+    const userPrompt = buildUserPrompt(effective, manifest, { chapterPlan });
+    yield { kind: "status", message: `${llm.displayName} 正在生成正文…` };
+    yield { kind: "chunk", text: "# 正文\n\n" };
     const bErr = yield* streamOne({
       input,
       llm,

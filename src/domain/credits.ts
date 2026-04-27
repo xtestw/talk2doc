@@ -8,7 +8,7 @@
 //
 // 调用方需自行处理 InsufficientCreditsError（HTTP 层翻译为 402）。
 
-import { newId } from "../core/id";
+import { newId } from "../core/utils/id";
 import type { DB } from "../infra/db/d1";
 import type { CreditReason, CreditTx } from "./types";
 

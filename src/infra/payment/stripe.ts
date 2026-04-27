@@ -6,7 +6,7 @@
 //   webhook 签名头：Stripe-Signature: t=<unix>,v1=<hex>
 //   v1 = HMAC-SHA256(secret, `${t}.${rawBody}`)
 
-import { hmacSha256Hex, timingSafeEqual } from "../../core/hmac";
+import { hmacSha256Hex, timingSafeEqual } from "../../core/security/hmac";
 
 const API = "https://api.stripe.com/v1";
 

@@ -1,8 +1,8 @@
 // Session = HS256 JWT in HttpOnly cookie。
 // 这个文件只关心"如何把用户身份编码到 cookie / 从 cookie 解出来"，不关心具体路由。
 
-import { parseCookies, serializeCookie } from "../../core/cookie";
-import { signJwt, verifyJwt, type JwtClaims } from "../../core/jwt";
+import { parseCookies, serializeCookie } from "../../core/security/cookie";
+import { signJwt, verifyJwt, type JwtClaims } from "../../core/security/jwt";
 
 /** 30 天 session（可后续做 refresh，本期保持简单）。 */
 const SESSION_TTL_SEC = 30 * 24 * 60 * 60;

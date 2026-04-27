@@ -3,7 +3,7 @@
 // 关注点拆分（同一文件内的逻辑分组）：
 //   · 状态：me / pricing / streaming
 //   · UI：auth bar 渲染、菜单、Toast、Modal
-//   · 生成：SSE 解析 + rAF 节奏 + 双版本拆分（A 版/B 版/全部 view）
+//   · 生成：SSE 解析 + rAF 节奏 + 正文渲染
 //   · 鉴权/计费：SSE/HTTP 内 auth_required 弹登录，credits_insufficient 弹充值
 //
 // 不引第三方框架；marked.js 通过 CDN 引（兜底用极简 fallback）。
@@ -25,7 +25,7 @@ export const APP_SCRIPT = /* javascript */ `
     toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
   }
 
-  // ---------- LocalStorage settings (LLM 配置 + 视图模式) ----------
+  // ---------- LocalStorage settings (LLM 配置) ----------
   const LS = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
@@ -200,14 +200,14 @@ export const APP_SCRIPT = /* javascript */ `
   const urlIn = $("#url");
   const submit = $("#submit");
   const modelSwitch = $(".model-switch");
-  const statusEl = $("#status");
+  const statusWrap = $("#status");
+  const statusEl = $("#status-text");
   const metaEl = $("#meta");
-  const tabsWrap = $("#viewbar");
   const downloadSubtitleBtn = $("#download-subtitle");
-  const articleAll = $("#article-all");
-  const articleA = $("#article-a");
-  const articleB = $("#article-b");
+  const articlePublish = $("#article-publish");
   let subtitleText = "";
+  let currentJobId = "";
+  let lastSeq = 0;
 
   // 高级设置回填
   const providerInputs = Array.from(document.querySelectorAll('input[name="provider"]'));
@@ -224,35 +224,19 @@ export const APP_SCRIPT = /* javascript */ `
     return checked ? checked.value : "gemini";
   }
 
-  let viewMode = LS.get("t2d:view", "all"); // "all" | "a" | "b"
-  function applyView() {
-    LS.set("t2d:view", viewMode);
-    tabsWrap.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === viewMode));
-    articleAll.hidden = viewMode !== "all";
-    articleA.hidden = viewMode !== "a";
-    articleB.hidden = viewMode !== "b";
-  }
-  tabsWrap.addEventListener("click", (e) => {
-    const t = e.target.closest("[data-view]");
-    if (!t) return;
-    if (t.disabled) return;
-    viewMode = t.dataset.view;
-    applyView();
-  });
-
   let abortCtrl = null;
   let busy = false;
   function setBusy(b) {
     busy = b;
     submit.textContent = b ? "停止" : "生成";
     submit.classList.toggle("stop", b);
-    statusEl.classList.toggle("busy", b);
+    statusWrap?.classList.toggle("busy", b);
     urlIn.disabled = b;
     providerInputs.forEach((el) => { el.disabled = b; });
     modelSwitch?.classList.toggle("disabled", b);
   }
 
-  // 接收的全文：用于 rAF 渲染节流；分隔 A/B 用 \\n---\\n
+  // 接收的全文：用于 rAF 渲染节流（单篇正文）。
   let buffer = "";
   let pending = false;
   let hiddenRenderTimer = null;
@@ -262,21 +246,8 @@ export const APP_SCRIPT = /* javascript */ `
     const run = () => {
       pending = false;
       hiddenRenderTimer = null;
-      const parts = buffer.split(/\\n-{3,}\\n/);
-      const a = parts[0] || "";
-      const b = parts.slice(1).join("\\n---\\n");
-
-      articleAll.innerHTML = md(buffer);
-      articleA.innerHTML = md(a);
-      articleB.innerHTML = md(b);
-
-      const hasB = b.trim().length > 0;
-      tabsWrap.querySelector('[data-view="b"]').disabled = !hasB;
-
-      // 每个视图单独维护 empty 状态，避免切换 tab 后出现“白线空白”。
-      articleAll.classList.toggle("empty", !buffer.trim());
-      articleA.classList.toggle("empty", !a.trim());
-      articleB.classList.toggle("empty", !b.trim());
+      articlePublish.innerHTML = md(buffer);
+      articlePublish.classList.toggle("empty", !buffer.trim());
     };
 
     // 页面切到后台时 rAF 会被降频/暂停；改用定时器保证 SSE 内容持续刷新。
@@ -288,12 +259,38 @@ export const APP_SCRIPT = /* javascript */ `
   }
 
   function setStreaming(s) {
-    [articleAll, articleA, articleB].forEach((el) => el.classList.toggle("streaming", s));
+    articlePublish.classList.toggle("streaming", s);
   }
 
-  function onSseEvent(kind, raw) {
-    let data = raw;
-    try { data = JSON.parse(raw); } catch {}
+  function tryJson(v) {
+    if (typeof v !== "string") return v;
+    try { return JSON.parse(v); } catch { return v; }
+  }
+
+  function parseSseBlock(block) {
+    let evt = "message";
+    let dat = "";
+    let seq;
+    for (const ln of block.split("\\n")) {
+      if (ln.startsWith("id:")) {
+        const n = Number(ln.slice(3).trim());
+        if (Number.isFinite(n)) seq = n;
+      } else if (ln.startsWith("event:")) evt = ln.slice(6).trim();
+      else if (ln.startsWith("data:")) dat += (dat ? "\\n" : "") + ln.slice(5).trim();
+    }
+    return { evt, dat: tryJson(dat), seq };
+  }
+
+  function onSseEvent(kind, raw, seq) {
+    const data = tryJson(raw);
+    if (typeof seq === "number" && Number.isFinite(seq) && seq > lastSeq) lastSeq = seq;
+    if (kind === "job") {
+      const payload = tryJson(data);
+      if (payload && typeof payload === "object" && payload.jobId) {
+        currentJobId = String(payload.jobId);
+      }
+      return;
+    }
     if (kind === "status") {
       statusEl.textContent = String(data || "");
     } else if (kind === "subtitle") {
@@ -329,60 +326,80 @@ export const APP_SCRIPT = /* javascript */ `
   }
 
   async function streamGenerate(payload) {
-    abortCtrl = new AbortController();
-    const r = await fetch("/api/generate", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify(payload),
-      signal: abortCtrl.signal,
-    });
+    const MAX_RETRY = 5;
+    let attempt = 0;
+    while (true) {
+      abortCtrl = new AbortController();
+      const reqBody = {
+        ...payload,
+        ...(currentJobId ? { jobId: currentJobId, fromSeq: lastSeq } : {}),
+      };
+      const r = await fetch("/api/generate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify(reqBody),
+        signal: abortCtrl.signal,
+      });
 
-    // 同步错误（401/402/400/500）走 JSON 路径
-    if (!r.ok) {
-      let j = null;
-      try { j = await r.json(); } catch {}
-      if (r.status === 401) {
-        if (j && j.error === "auth_required") {
-          openAuthRequiredModal(j.reason, j.estCost);
-          statusEl.textContent = "需要登录后才能使用转写";
-          showToast("需要登录以使用转写");
+      // 同步错误（401/402/400/500）走 JSON 路径
+      if (!r.ok) {
+        let j = null;
+        try { j = await r.json(); } catch {}
+        if (r.status === 401) {
+          if (j && j.error === "auth_required") {
+            openAuthRequiredModal(j.reason, j.estCost);
+            statusEl.textContent = "需要登录后才能使用转写";
+            showToast("需要登录以使用转写");
+            return;
+          }
+          showToast("请先登录");
+          location.href = "/api/auth/google/start";
           return;
         }
-        showToast("请先登录");
-        location.href = "/api/auth/google/start";
-        return;
-      }
-      if (r.status === 402 || (j && j.error === "credits_insufficient")) {
-        showToast("积分不足，请充值");
-        openTopup();
-        statusEl.textContent = j ? \`积分不足：需要 \${j.required ?? "?"}，余额 \${j.balance ?? "?"}\` : "积分不足";
-        return;
-      }
-      throw new Error((j && (j.message || j.error)) || ("HTTP " + r.status));
-    }
-
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let acc = "";
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      acc += dec.decode(value, { stream: true });
-
-      let idx;
-      while ((idx = acc.indexOf("\\n\\n")) !== -1) {
-        const block = acc.slice(0, idx);
-        acc = acc.slice(idx + 2);
-        let evt = "message", dat = "";
-        for (const ln of block.split("\\n")) {
-          if (ln.startsWith("event:")) evt = ln.slice(6).trim();
-          else if (ln.startsWith("data:")) dat += (dat ? "\\n" : "") + ln.slice(5).trim();
+        if (r.status === 402 || (j && j.error === "credits_insufficient")) {
+          showToast("积分不足，请充值");
+          openTopup();
+          statusEl.textContent = j ? \`积分不足：需要 \${j.required ?? "?"}，余额 \${j.balance ?? "?"}\` : "积分不足";
+          return;
         }
-        try { dat = JSON.parse(dat); } catch {}
-        onSseEvent(evt, dat);
+        throw new Error((j && (j.message || j.error)) || ("HTTP " + r.status));
       }
+
+      const headerJobId = r.headers.get("X-Generate-Job-Id");
+      if (headerJobId && !currentJobId) currentJobId = headerJobId;
+
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let acc = "";
+      let gotDone = false;
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          acc += dec.decode(value, { stream: true });
+
+          let idx;
+          while ((idx = acc.indexOf("\\n\\n")) !== -1) {
+            const block = acc.slice(0, idx);
+            acc = acc.slice(idx + 2);
+            const { evt, dat, seq } = parseSseBlock(block);
+            onSseEvent(evt, dat, seq);
+            if (evt === "done") gotDone = true;
+          }
+        }
+      } catch (e) {
+        if (e && e.name === "AbortError") throw e;
+      }
+
+      if (gotDone) return;
+      if (attempt >= MAX_RETRY) {
+        throw new Error("流连接中断，重连多次失败，请重试");
+      }
+      attempt += 1;
+      statusEl.textContent = \`连接中断，正在续传（第 \${attempt} 次）…\`;
+      await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
     }
   }
 
@@ -400,6 +417,8 @@ export const APP_SCRIPT = /* javascript */ `
 
     buffer = "";
     subtitleText = "";
+    currentJobId = "";
+    lastSeq = 0;
     if (downloadSubtitleBtn) downloadSubtitleBtn.hidden = true;
     scheduleRender();
     setBusy(true);
@@ -469,7 +488,6 @@ export const APP_SCRIPT = /* javascript */ `
 
   // 初始化
   bindMenu();
-  applyView();
   refreshMe();
 })();
 `;

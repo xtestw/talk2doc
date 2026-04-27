@@ -2,7 +2,7 @@
 // 也在这里集中处理"首单赠送"的业务规则，避免散落在 OAuth 路由里。
 
 import type { DB } from "../infra/db/d1";
-import { newId } from "../core/id";
+import { newId } from "../core/utils/id";
 import type { User } from "./types";
 
 export interface UpsertProfile {

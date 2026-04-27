@@ -6,8 +6,8 @@
 // 不打网络。直接用 stub strategy 模拟："字幕成功不扣分 / 字幕失败走付费 ASR 扣分 /
 // ASR 失败退分 / 余额不足直接 fatal 抛 InsufficientCreditsError"。
 
-import { runWithFallback, type FallbackStrategy } from "../src/core/fallback";
-import { withBilledStrategy } from "../src/core/billed-strategy";
+import { runWithFallback, type FallbackStrategy } from "../src/core/execution/fallback";
+import { withBilledStrategy } from "../src/core/execution/billed-strategy";
 import { CreditsService, InsufficientCreditsError } from "../src/domain/credits";
 import { AuthRequiredError } from "../src/domain/errors";
 import { UsersService } from "../src/domain/users";

@@ -8,7 +8,7 @@
 - **付费兜底**：无足够字幕时走 Cloudflare Workers AI Whisper，按分钟扣积分；ASR 失败自动退分。**未登录**也可先生成，仅当**必须**走 ASR 时才弹登录（付费转写以账户扣分为前提）。
 - **账户体系**：Google OAuth 登录、注册赠送积分、Stripe 充值、订单/流水可查；充值/账单**必须**登录。
 - **前端**：原生 ES Module，零框架；`marked` 走 jsDelivr CDN，`fetch` + `ReadableStream` + **rAF 字符级流式**渲染；登录态 / 余额胶囊 / 充值弹窗 / 402 引导一应俱全。
-- **排版**：双层小标题 + `**发言人:**` 对话块，CSS `:has()` 自动识别加左侧引述线；A 版（口播感）/ B 版（可发布）双稿一次出。
+- **排版**：双层小标题 + `**发言人:**` 对话块，CSS `:has()` 自动识别加左侧引述线；单稿输出可发布版本。
 
 ## 架构
 
@@ -66,7 +66,7 @@ flowchart LR
 **两阶段写稿**：
 
 1. **角色识别**（非流式，结构化 JSON）：先从字幕首尾 + 中段抽样推断参与者真实姓名与角色；具备 vision 时把 10×10 sprite 一并送入。失败自动退化为占位身份，不阻塞主流程。
-2. **正文撰写**（流式）：把 manifest 作为"权威发言人名单"注入正文 prompt，并按 A 版（口播感）→ `---` → B 版（可发布）顺序连续生成两稿。
+2. **正文撰写**（流式）：把 manifest 作为"权威发言人名单"注入正文 prompt，输出可发布版本。
 
 **生成请求生命周期**（`POST /api/generate`）：
 
@@ -114,7 +114,7 @@ src/
 ├── app/
 │   ├── video-pipeline.ts        免费字幕 → 付费 ASR 兜底主干
 │   └── article/
-│       ├── article-agent.ts     两阶段编排（speaker-id → 双稿）
+│       ├── article-agent.ts     两阶段编排（speaker-id → 可发布版本）
 │       ├── speaker-id.ts        阶段 1
 │       └── prompts/index.ts     从 prompts/*.md import + 占位填充
 ├── api/
@@ -125,12 +125,12 @@ src/
 │   ├── middleware/              auth / err / log
 │   └── routes/                  auth / pricing / billing / generate
 ├── web/
-│   ├── styles.ts                CSS（含登录区/弹窗/双稿视图）
+│   ├── styles.ts                CSS（含登录区/弹窗/文章视图）
 │   ├── auth.ts                  顶栏鉴权区骨架
 │   ├── billing.ts               充值弹窗骨架
 │   ├── app.ts                   客户端脚本（SSE / rAF / 充值流）
 │   └── index.ts                 组装 INDEX_HTML
-prompts/                         article.spoken.md / article.publish.md / speaker-id.system.md / few-shot.md
+prompts/                         article.publish.md / speaker-id.system.md / few-shot.md
 migrations/                      0001_init.sql（users / credit_transactions / billing_orders / asr_jobs）
 tests/                           smoke-credits / smoke-asr-fallback / smoke-youtube / smoke-agent
 ```
@@ -214,7 +214,7 @@ npm run test:agent          # 真实网络：端到端 LLM 流（需 LLM_API_KEY
 2. 打开页面，粘贴 YouTube 链接。有**足够字幕**时最省；**无足够字幕**时会提示**登录**后用积分做付费转写（不静默扣费）。
 3. 需要**充值、账单、余额**时，点 **Sign in with Google** 登录（首登赠送等见 `wrangler.toml`）。
 4. 点 **生成**。若走免费路径会显示「已使用免费字幕（… 行）」；登录后走 ASR 会显示扣积分与余额。匿名且需要转写时弹**登录**引导；**积分不足**则弹**充值**。
-5. 文章下方可切 **A 版（口播感） / B 版（可发布） / 全部**；展开 **高级** 可改 provider（Gemini/DeepSeek）、模型与 API Key（仅本机 `localStorage`）。
+5. 文章生成后直接展示**可发布版本**；展开 **高级** 可改 provider（Gemini/DeepSeek）、模型与 API Key（仅本机 `localStorage`）。
 
 ## 设计取舍
 

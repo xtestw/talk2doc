@@ -8,14 +8,14 @@
 // 需付费 ASR 但匿名时由 AuthRequiredError 外抛，流式层翻 SSE error；
 // 其他技术错由 runWithFallback 沿链尝试。
 
-import { newId } from "../core/id";
+import { newId } from "../core/utils/id";
 import {
   runWithFallback,
   type FallbackStrategy,
-} from "../core/fallback";
-import { withBilledStrategy } from "../core/billed-strategy";
-import type { Logger } from "../core/log";
-import { logger as defaultLogger } from "../core/log";
+} from "../core/execution/fallback";
+import { withBilledStrategy } from "../core/execution/billed-strategy";
+import type { Logger } from "../core/utils/log";
+import { logger as defaultLogger } from "../core/utils/log";
 
 import { makeAsrTranscriptProvider } from "../infra/transcript/asr";
 import { YouTubeProvider } from "../infra/transcript/youtube";
@@ -77,6 +77,11 @@ export class VideoPipeline {
       url: input.url,
       userId: input.user?.id ?? "anon",
     });
+    log.info("transcript_pipeline_start", {
+      hasAsr: Boolean(this.deps.asr),
+      userAuthed: Boolean(input.user),
+      minSubtitleLines: MIN_USABLE_SUBTITLE_LINES,
+    });
 
     // 估算 ASR 成本时按 8 分钟兜底（拉到 player 才精确，但提前估算用于余额预检即可）。
     // 真扣分时由 BilledStrategy 在 cf-whisper 之前重算。
@@ -92,6 +97,11 @@ export class VideoPipeline {
     if (this.deps.asr) {
       strategies.push(this.paidAsrStrategy(this.deps.asr));
     }
+    log.info("transcript_strategies_ready", {
+      strategies: strategies.map((s) => s.id),
+      estAsrCost: asrCost,
+      asrJobId,
+    });
 
     const { result, tried, errors } = await runWithFallback(ctx, strategies, {
       accept: (r) => r.transcript.subtitleLines >= MIN_USABLE_SUBTITLE_LINES,
@@ -104,7 +114,12 @@ export class VideoPipeline {
       throw new Error(`抽不到字幕：${errors.join(" | ") || "all_strategies_failed"}`);
     }
 
-    log.info("transcript_done", { strategy: result.strategy, cost: result.cost });
+    log.info("transcript_done", {
+      strategy: result.strategy,
+      cost: result.cost,
+      subtitleLines: result.transcript.subtitleLines,
+      subtitleLang: result.transcript.subtitleLang,
+    });
     return result;
   }
 

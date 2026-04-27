@@ -6,6 +6,8 @@ import type { LLMAdapter, StreamRequest } from "./types";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_MODEL = "gemini-2.5-flash";
+const MAX_RETRIES_ON_503 = 2;
+const RETRY_BASE_MS = 700;
 
 interface GeminiPart {
   text?: string;
@@ -48,7 +50,7 @@ export const GeminiAdapter: LLMAdapter = {
       },
     };
 
-    const upstream = await fetch(endpoint, {
+    const requestInit: RequestInit = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -56,10 +58,14 @@ export const GeminiAdapter: LLMAdapter = {
       },
       body: JSON.stringify(body),
       signal: req.signal,
-    });
+    };
+    const upstream = await fetchWith503Retry(endpoint, requestInit, req.signal);
 
     if (!upstream.ok || !upstream.body) {
       const detail = await upstream.text().catch(() => "");
+      if (upstream.status === 503) {
+        throw new Error("Gemini 当前请求高峰，已自动重试仍失败，请稍后重试或切换 DeepSeek。");
+      }
       throw new Error(`Gemini API ${upstream.status}: ${detail || upstream.statusText}`);
     }
 
@@ -69,6 +75,42 @@ export const GeminiAdapter: LLMAdapter = {
       .pipeThrough(geminiTextExtractor());
   },
 };
+
+async function fetchWith503Retry(
+  url: string,
+  init: RequestInit,
+  signal?: AbortSignal,
+): Promise<Response> {
+  let attempt = 0;
+  let lastResponse: Response | null = null;
+
+  while (attempt <= MAX_RETRIES_ON_503) {
+    const response = await fetch(url, init);
+    if (response.status !== 503) return response;
+    lastResponse = response;
+
+    if (attempt === MAX_RETRIES_ON_503) break;
+    const waitMs = RETRY_BASE_MS * (attempt + 1);
+    await sleep(waitMs, signal);
+    attempt += 1;
+  }
+
+  return lastResponse as Response;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 /** 把 Gemini SSE 事件解码为纯文本增量；遇到上游 error/blockReason 抛出。 */
 function geminiTextExtractor(): TransformStream<string, string> {

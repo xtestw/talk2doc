@@ -2,14 +2,18 @@
 //   event: <kind>
 //   data: <JSON-encoded string>
 //   \n
-// kind ∈ "status" | "chunk" | "subtitle" | "error" | "done"
+// kind ∈ "job" | "status" | "chunk" | "subtitle" | "error" | "done"
 
-export type SseKind = "status" | "chunk" | "subtitle" | "error" | "done";
+export type SseKind = "job" | "status" | "chunk" | "subtitle" | "error" | "done";
 
 const enc = new TextEncoder();
 
 export function encodeEvent(kind: SseKind, data: string): Uint8Array {
   return enc.encode(`event: ${kind}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+export function encodeEventWithId(seq: number, kind: SseKind, data: string): Uint8Array {
+  return enc.encode(`id: ${seq}\nevent: ${kind}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
 /**

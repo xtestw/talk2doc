@@ -6,3 +6,4 @@ dist/
 .dry/
 tests/.outputs/
 *.log
+.local/

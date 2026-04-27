@@ -9,7 +9,7 @@
 //   });
 
 import type { FallbackStrategy } from "./fallback";
-import { newId } from "./id";
+import { newId } from "../utils/id";
 
 export interface BillingHooks<TCtx> {
   /** 估算需扣多少积分（>0）。 */

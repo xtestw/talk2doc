@@ -4,9 +4,9 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { AppConfig, RawEnv } from "../infra/config";
 import { loadConfig } from "../infra/config";
-import { newId } from "../core/id";
-import type { Logger } from "../core/log";
-import { logger as rootLogger } from "../core/log";
+import { newId } from "../core/utils/id";
+import type { Logger } from "../core/utils/log";
+import { logger as rootLogger } from "../core/utils/log";
 import { DB } from "../infra/db/d1";
 import { CreditsService } from "../domain/credits";
 import { BillingService } from "../domain/billing";

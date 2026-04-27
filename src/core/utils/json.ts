@@ -23,4 +23,3 @@ export function extractFirstJsonObject(s: string): string | null {
   }
   return null;
 }
-

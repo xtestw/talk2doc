@@ -3,7 +3,7 @@
 // 幂等：markPaid 用 status='pending' 作前置守卫，反复调用不会重复加分。
 // 充值与"加分流水"在同一个 D1 batch，确保账实一致。
 
-import { newId } from "../core/id";
+import { newId } from "../core/utils/id";
 import type { DB } from "../infra/db/d1";
 import type { BillingOrder, OrderStatus } from "./types";
 
