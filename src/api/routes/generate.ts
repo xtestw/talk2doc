@@ -11,6 +11,7 @@ import { newId } from "../../core/utils/id";
 import { InsufficientCreditsError } from "../../domain/credits";
 import { AuthRequiredError } from "../../domain/errors";
 import { selectAdapter } from "../../infra/llm";
+import { SubtitleFetchTransientError } from "../../infra/transcript/errors";
 import { withAuth } from "../middleware/auth";
 import { encodeEventWithId, type SseKind } from "../sse";
 import { err } from "../respond";
@@ -231,6 +232,12 @@ async function runJob(
         code: "auth_required",
         reason: e.reason,
         estCost: e.estCost,
+      }));
+    } else if (e instanceof SubtitleFetchTransientError) {
+      publish(job, "error", JSON.stringify({
+        code: "subtitle_fetch_failed",
+        message: e.message,
+        estCost: ctx.services.pricing.asrCostCredits(8 * 60),
       }));
     } else {
       publish(job, "error", e instanceof Error ? e.message : String(e));

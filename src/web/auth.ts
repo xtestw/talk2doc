@@ -55,3 +55,17 @@ export const AUTH_REQUIRED_MODAL_HTML = /* html */ `
   </div>
 </div>
 `;
+
+/** 字幕抓取链路暂时失败时，先给用户明确选择：稍后重试 或 改走 ASR。 */
+export const SUBTITLE_FAILED_MODAL_HTML = /* html */ `
+<div id="subtitle-failed-mask" class="modal-mask" role="dialog" aria-modal="true" aria-labelledby="subtitle-failed-title">
+  <div class="modal">
+    <h2 id="subtitle-failed-title">字幕获取失败</h2>
+    <p class="lead">当前无法稳定获取该视频字幕。若你确认该视频有字幕，可以稍后再试；也可以改用 ASR 转写（约消耗 <strong id="subtitle-failed-estcost">—</strong> 积分）。</p>
+    <div class="footer" style="margin-top:20px;">
+      <button id="subtitle-failed-later" class="close" type="button">稍后重试</button>
+      <button id="subtitle-failed-asr" class="signin-btn" type="button">去登录并使用 ASR</button>
+    </div>
+  </div>
+</div>
+`;

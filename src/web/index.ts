@@ -6,7 +6,7 @@
 //   · marked.js 通过 CDN 引入，离线/挂掉时有本地 fallback（见 app.ts）
 
 import { APP_SCRIPT } from "./app";
-import { AUTH_BAR_HTML, AUTH_REQUIRED_MODAL_HTML } from "./auth";
+import { AUTH_BAR_HTML, AUTH_REQUIRED_MODAL_HTML, SUBTITLE_FAILED_MODAL_HTML } from "./auth";
 import { BILLING_MODAL_HTML } from "./billing";
 import { STYLES } from "./styles";
 
@@ -65,6 +65,7 @@ const BODY = /* html */ `
 
 ${BILLING_MODAL_HTML}
 ${AUTH_REQUIRED_MODAL_HTML}
+${SUBTITLE_FAILED_MODAL_HTML}
 
 <div id="toast" class="toast" role="status"></div>
 

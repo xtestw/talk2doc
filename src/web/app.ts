@@ -74,6 +74,17 @@ export const APP_SCRIPT = /* javascript */ `
     $("#auth-mask")?.classList.add("open");
   }
   function closeAuthRequired() { $("#auth-mask")?.classList.remove("open"); }
+  function openSubtitleFailedModal(estCost) {
+    const v = (estCost != null && estCost !== "") ? String(estCost) : "—";
+    const n = $("#subtitle-failed-estcost");
+    if (n) n.textContent = v;
+    const asrBtn = $("#subtitle-failed-asr");
+    if (asrBtn) {
+      asrBtn.textContent = me ? "去充值并使用 ASR" : "去登录并使用 ASR";
+    }
+    $("#subtitle-failed-mask")?.classList.add("open");
+  }
+  function closeSubtitleFailedModal() { $("#subtitle-failed-mask")?.classList.remove("open"); }
 
   // ---------- Menu ----------
   function bindMenu() {
@@ -307,9 +318,15 @@ export const APP_SCRIPT = /* javascript */ `
       }
       if (detail && typeof detail === "object" && detail.code === "auth_required") {
         const ec = detail.estCost;
-        statusEl.textContent = "无可用字幕，转写需登录，约 " + (ec != null ? ec : "?") + " 积分";
-        showToast("需要登录以使用转写");
-        openAuthRequiredModal(detail.reason, detail.estCost);
+        statusEl.textContent = "字幕获取失败。若确认有字幕可稍后重试，或改用 ASR 转写（约 " + (ec != null ? ec : "?") + " 积分）";
+        showToast("字幕获取失败");
+        openSubtitleFailedModal(detail.estCost);
+        return;
+      }
+      if (detail && typeof detail === "object" && detail.code === "subtitle_fetch_failed") {
+        statusEl.textContent = "字幕获取失败，请稍后重试或改用 ASR 转写";
+        showToast("字幕获取失败");
+        openSubtitleFailedModal(detail.estCost);
         return;
       }
       if (detail && typeof detail === "object" && detail.code === "credits_insufficient") {
@@ -348,9 +365,9 @@ export const APP_SCRIPT = /* javascript */ `
         try { j = await r.json(); } catch {}
         if (r.status === 401) {
           if (j && j.error === "auth_required") {
-            openAuthRequiredModal(j.reason, j.estCost);
-            statusEl.textContent = "需要登录后才能使用转写";
-            showToast("需要登录以使用转写");
+            openSubtitleFailedModal(j.estCost);
+            statusEl.textContent = "字幕获取失败。若确认有字幕可稍后重试，或改用 ASR 转写";
+            showToast("字幕获取失败");
             return;
           }
           showToast("请先登录");
@@ -453,8 +470,27 @@ export const APP_SCRIPT = /* javascript */ `
   if (authC) authC.addEventListener("click", closeAuthRequired);
   const authM = $("#auth-mask");
   if (authM) authM.addEventListener("click", (e) => { if (e.target && e.target.id === "auth-mask") closeAuthRequired(); });
+  const subtitleLater = $("#subtitle-failed-later");
+  if (subtitleLater) subtitleLater.addEventListener("click", closeSubtitleFailedModal);
+  const subtitleAsr = $("#subtitle-failed-asr");
+  if (subtitleAsr) {
+    subtitleAsr.addEventListener("click", () => {
+      closeSubtitleFailedModal();
+      if (!me) {
+        location.href = "/api/auth/google/start";
+        return;
+      }
+      openTopup();
+    });
+  }
+  const subtitleMask = $("#subtitle-failed-mask");
+  if (subtitleMask) {
+    subtitleMask.addEventListener("click", (e) => {
+      if (e.target && e.target.id === "subtitle-failed-mask") closeSubtitleFailedModal();
+    });
+  }
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeTopup(); closeAuthRequired(); }
+    if (e.key === "Escape") { closeTopup(); closeAuthRequired(); closeSubtitleFailedModal(); }
   });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && hiddenRenderTimer) {
