@@ -63,10 +63,11 @@ flowchart LR
 
 ## 关键流程
 
-**两阶段写稿**：
+**三阶段写稿（含结构自修复）**：
 
 1. **角色识别**（非流式，结构化 JSON）：先从字幕首尾 + 中段抽样推断参与者真实姓名与角色；具备 vision 时把 10×10 sprite 一并送入。失败自动退化为占位身份，不阻塞主流程。
-2. **正文撰写**（流式）：把 manifest 作为"权威发言人名单"注入正文 prompt，输出可发布版本。
+2. **章节规划**（非流式）：对访谈内容做话题聚类，产出章节骨架（chapter plan），用于约束后续成稿结构。
+3. **正文撰写**（流式）：把 manifest 与 chapter plan 一并注入正文 prompt，输出可发布版本；若检测到结构缺失（如缺少 `##` / `###`、问答标签不完整、多版本标题），自动触发一次修复重写，仍返回单一最终稿。
 
 **生成请求生命周期**（`POST /api/generate`）：
 
@@ -80,7 +81,11 @@ withAuth（有 cookie 则带 currentUser；匿名可进来）
               ├─ 已登录  → withBilledStrategy (charge → ASR → ok / refund)
               │            └─ InsufficientCreditsError ── 402 / credits_insufficient 弹充值
    │
-   └─→ ArticleAgent.run                 ── SSE: status / chunk / error / done
+   └─→ ArticleAgent.run
+         ├─ 阶段1：speaker-id（参与者识别）
+         ├─ 阶段2：chapter-plan（话题聚类与章节规划）
+         └─ 阶段3：publish（正文流式生成 + 结构异常自动修复）
+                                       ── SSE: status / chunk / error / done
 ```
 
 ## 项目结构
@@ -114,8 +119,8 @@ src/
 ├── app/
 │   ├── video-pipeline.ts        免费字幕 → 付费 ASR 兜底主干
 │   └── article/
-│       ├── article-agent.ts     两阶段编排（speaker-id → 可发布版本）
-│       ├── speaker-id.ts        阶段 1
+│       ├── article-agent.ts     三阶段编排（speaker-id → chapter-plan → publish）
+│       ├── speaker-id.ts        阶段 1（参与者识别）
 │       └── prompts/index.ts     从 prompts/*.md import + 占位填充
 ├── api/
 │   ├── context.ts               每请求 service container
@@ -130,7 +135,7 @@ src/
 │   ├── billing.ts               充值弹窗骨架
 │   ├── app.ts                   客户端脚本（SSE / rAF / 充值流）
 │   └── index.ts                 组装 INDEX_HTML
-prompts/                         article.publish.md / speaker-id.system.md / few-shot.md
+prompts/                         article.publish.md / chapter-plan.system.md / speaker-id.system.md / few-shot.md
 migrations/                      0001_init.sql（users / credit_transactions / billing_orders / asr_jobs）
 tests/                           smoke-credits / smoke-asr-fallback / smoke-youtube / smoke-agent
 ```
