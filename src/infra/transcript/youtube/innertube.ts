@@ -1,6 +1,8 @@
 // InnerTube ANDROID /player：拿元信息 + caption 列表 + storyboard spec
 // 走 ANDROID 客户端是绕过 PoT 软封的关键，WEB 客户端 2024 起会返回 200/空 body。
 
+import { SubtitleFetchTransientError } from "../errors";
+
 const ANDROID_KEY = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
 const ANDROID_VERSION = "20.10.38";
 export const ANDROID_UA =
@@ -74,8 +76,12 @@ export async function fetchPlayerResponse(
       signal,
     },
   );
-  if (!resp.ok) throw new Error(`InnerTube /player 失败：HTTP ${resp.status}`);
-  return (await resp.json()) as PlayerResponse;
+  if (!resp.ok) throw new SubtitleFetchTransientError(`InnerTube /player 失败：HTTP ${resp.status}`);
+  try {
+    return (await resp.json()) as PlayerResponse;
+  } catch {
+    throw new SubtitleFetchTransientError("InnerTube /player 返回了无效 JSON");
+  }
 }
 
 /** zh > en > 其他；同语言下手动字幕优先于 ASR */

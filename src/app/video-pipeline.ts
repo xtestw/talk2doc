@@ -20,6 +20,7 @@ import { logger as defaultLogger } from "../core/utils/log";
 import { makeAsrTranscriptProvider } from "../infra/transcript/asr";
 import { YouTubeProvider } from "../infra/transcript/youtube";
 import type { TranscriptResult } from "../infra/transcript/types";
+import { SubtitleFetchTransientError } from "../infra/transcript/errors";
 import type { AsrProvider } from "../infra/asr/types";
 
 import type { Pricing } from "../domain/pricing";
@@ -106,7 +107,9 @@ export class VideoPipeline {
     const { result, tried, errors } = await runWithFallback(ctx, strategies, {
       accept: (r) => r.transcript.subtitleLines >= MIN_USABLE_SUBTITLE_LINES,
       fatal: (e) =>
-        e instanceof InsufficientCreditsError || e instanceof AuthRequiredError,
+        e instanceof InsufficientCreditsError ||
+        e instanceof AuthRequiredError ||
+        e instanceof SubtitleFetchTransientError,
     });
 
     if (!result) {

@@ -57,11 +57,17 @@ export function buildUserPrompt(
     "",
     ...(opts?.chapterPlan
       ? [
-          "## 章节规划（写作时优先对齐）",
+          "## 章节规划（写作时优先对齐；优先使用每个小话题的“问题锚点”落地为主持人提问）",
           opts.chapterPlan.trim(),
           "",
         ]
       : []),
+    "## 输出验收清单（必须全部满足）",
+    "- 只输出单一最终稿，不要 A/B 版本或多草稿。",
+    "- 每个 ### 小话题必须是完整问答：至少 1 条主持人问题 + 至少 1 条嘉宾回答。",
+    "- 若字幕缺少显式提问，可先提炼一个保守问题，再给出回答。",
+    "- 问答内容必须可在字幕中找到依据，不得扩展新事实。",
+    "",
     "写作时先保证事实还原，再做语言整理。不得引入字幕里没有的新事实。",
     "",
     "请严格按照当前系统提示词完成写作任务。",
@@ -157,7 +163,7 @@ function cleanSubtitleForWriting(subtitle: string): string {
   };
 
   for (const ln of raw) {
-    const m = ln.match(/^(?:>>\s*)?([A-Za-z][A-Za-z .'-]{0,32}):\s*(.*)$/);
+    const m = ln.match(/^(?:>>\s*)?([\p{L}][\p{L}\p{N} .·'’-]{0,32})[:：]\s*(.*)$/u);
     if (m) {
       const speaker = m[1].trim();
       const content = (m[2] || "").trim();

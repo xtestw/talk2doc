@@ -1,6 +1,7 @@
 // YouTubeProvider：编排 player → caption → storyboard，产出 TranscriptResult
 
 import type { TranscriptProvider, TranscriptResult } from "../types";
+import { SubtitleUnavailableError } from "../errors";
 import { fetchCaptionJson3 } from "./caption";
 import { fetchPlayerResponse, pickCaptionTrack } from "./innertube";
 import { tryFetchStoryboardLevel0 } from "./storyboard";
@@ -57,7 +58,7 @@ async function extract(videoId: string, signal?: AbortSignal): Promise<Transcrip
   const tracks = player.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
   const track = pickCaptionTrack(tracks);
   if (!track) {
-    throw new Error("该视频没有可用字幕，请换一个有字幕的视频");
+    throw new SubtitleUnavailableError("该视频没有可用字幕，请换一个有字幕的视频");
   }
   const { text, lines } = await fetchCaptionJson3(track, signal);
 

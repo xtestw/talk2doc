@@ -3,6 +3,7 @@
 
 import { InsufficientCreditsError } from "../../domain/credits";
 import { AuthRequiredError } from "../../domain/errors";
+import { SubtitleFetchTransientError } from "../../infra/transcript/errors";
 import type { ApiContext } from "../context";
 import type { Handler } from "../router";
 import { err } from "../respond";
@@ -29,6 +30,9 @@ export function translateError(e: unknown, ctx: ApiContext): Response {
       reason: e.reason,
       estCost: e.estCost,
     });
+  }
+  if (e instanceof SubtitleFetchTransientError) {
+    return err(503, "subtitle_fetch_transient", e.message);
   }
   const msg = e instanceof Error ? e.message : String(e);
   ctx.log.error("unhandled_error", { error: msg, stack: e instanceof Error ? e.stack : undefined });

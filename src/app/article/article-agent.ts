@@ -91,53 +91,94 @@ export const ArticleAgent: Agent = {
     // ============ 阶段 3：正文生成（流式） ============
     const userPrompt = buildUserPrompt(effective, manifest, { chapterPlan });
     yield { kind: "status", message: `${llm.displayName} 正在生成正文…` };
-    yield { kind: "chunk", text: "# 正文\n\n" };
-    const bErr = yield* streamOne({
-      input,
-      llm,
-      systemPrompt: PUBLISH_SYSTEM_PROMPT,
-      userPrompt,
-      images: effective.frames,
-    });
-    if (bErr) {
-      yield { kind: "error", message: bErr };
+    let article = "";
+    try {
+      article = await collectOne({
+        input,
+        llm,
+        systemPrompt: PUBLISH_SYSTEM_PROMPT,
+        userPrompt,
+        images: effective.frames,
+      });
+    } catch (e) {
+      yield { kind: "error", message: e instanceof Error ? e.message : String(e) };
       return;
     }
+
+    const violations = checkQAOutline(article);
+    if (violations.length > 0) {
+      yield {
+        kind: "status",
+        message: `检测到结构问题（${violations.join("；")}），正在自动修复为标准问答结构…`,
+      };
+      try {
+        article = await collectOne({
+          input,
+          llm,
+          systemPrompt: PUBLISH_SYSTEM_PROMPT,
+          userPrompt: buildRepairPrompt(userPrompt, article, violations),
+          images: effective.frames,
+        });
+      } catch (e) {
+        yield {
+          kind: "status",
+          message: `自动修复失败（${e instanceof Error ? e.message : String(e)}），将返回首版结果`,
+        };
+      }
+    }
+
+    yield { kind: "chunk", text: article };
   },
 };
 
-async function* streamOne(opts: {
+function checkQAOutline(text: string): string[] {
+  const issues: string[] = [];
+  const mainCount = (text.match(/^##\s+/gm) || []).length;
+  const topicCount = (text.match(/^###\s+/gm) || []).length;
+  const hostCount = (text.match(/^\*\*[^*\n]{1,24}\*\*:\s*.*[?？]\s*$/gm) || []).length;
+  const answerCount = (text.match(/^\*\*[^*\n]{1,24}\*\*:\s*\S+/gm) || []).length;
+  const variantMarkers = (text.match(/^#\s*(?:[ABＣＤ]版|[A-D]版|版本[一二三四ABCD])\b/gm) || []).length;
+
+  if (variantMarkers > 0) issues.push("包含多版本标题");
+  if (mainCount === 0) issues.push("缺少二级主题");
+  if (topicCount === 0) issues.push("缺少三级小话题");
+  if (hostCount === 0) issues.push("缺少问句型主持人提问");
+  // 粗粒度：回答标签总数应该不少于主持人提问数。
+  if (answerCount < Math.max(1, hostCount)) issues.push("回答段数量不足");
+  return issues;
+}
+
+function buildRepairPrompt(originalUserPrompt: string, firstDraft: string, violations: string[]): string {
+  return [
+    originalUserPrompt,
+    "",
+    "## 修复任务（必须执行）",
+    `首版输出存在以下问题：${violations.join("；")}`,
+    "请在不引入新事实的前提下，仅做结构性修复，输出单一最终 Markdown 成稿：",
+    "- 保留主题与关键信息，不要重写成不同文章。",
+    "- 每个 ### 小话题都必须包含：1 条主持人提问（问句）+ 至少 1 条嘉宾回答。",
+    "- 禁止输出 A/B 版、多草稿或解释说明。",
+    "",
+    "## 首版输出（待修复）",
+    firstDraft.trim(),
+  ].join("\n");
+}
+
+async function collectOne(opts: {
   input: AgentInput;
   llm: AgentInput["llm"];
   systemPrompt: string;
   userPrompt: string;
   images: AgentInput["transcript"]["frames"];
-}): AsyncGenerator<AgentEvent, string | null, void> {
-  let stream: ReadableStream<string>;
-  try {
-    stream = await opts.llm.stream({
-      systemPrompt: opts.systemPrompt,
-      userPrompt: opts.userPrompt,
-      images: opts.images,
-      apiKey: opts.input.apiKey,
-      model: opts.input.model,
-      baseUrl: opts.input.baseUrl,
-      signal: opts.input.signal,
-    });
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  }
-
-  const reader = stream.getReader();
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) return null;
-      if (value) yield { kind: "chunk", text: value };
-    }
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  } finally {
-    reader.releaseLock();
-  }
+}): Promise<string> {
+  const stream = await opts.llm.stream({
+    systemPrompt: opts.systemPrompt,
+    userPrompt: opts.userPrompt,
+    images: opts.images,
+    apiKey: opts.input.apiKey,
+    model: opts.input.model,
+    baseUrl: opts.input.baseUrl,
+    signal: opts.input.signal,
+  });
+  return (await drainText(stream)).trim();
 }
