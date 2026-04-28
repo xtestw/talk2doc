@@ -63,11 +63,11 @@ flowchart LR
 
 ## 关键流程
 
-**三阶段写稿（含结构自修复）**：
+**三阶段写稿**：
 
 1. **角色识别**（非流式，结构化 JSON）：先从字幕首尾 + 中段抽样推断参与者真实姓名与角色；具备 vision 时把 10×10 sprite 一并送入。失败自动退化为占位身份，不阻塞主流程。
 2. **章节规划**（非流式）：对访谈内容做话题聚类，产出章节骨架（chapter plan），用于约束后续成稿结构。
-3. **正文撰写**（流式）：把 manifest 与 chapter plan 一并注入正文 prompt，输出可发布版本；若检测到结构缺失（如缺少 `##` / `###`、问答标签不完整、多版本标题），自动触发一次修复重写，仍返回单一最终稿。
+3. **正文撰写**（流式）：把 manifest 与 chapter plan 一并注入正文 prompt，实时输出可发布版本。
 
 **生成请求生命周期**（`POST /api/generate`）：
 
@@ -84,7 +84,7 @@ withAuth（有 cookie 则带 currentUser；匿名可进来）
    └─→ ArticleAgent.run
          ├─ 阶段1：speaker-id（参与者识别）
          ├─ 阶段2：chapter-plan（话题聚类与章节规划）
-         └─ 阶段3：publish（正文流式生成 + 结构异常自动修复）
+         └─ 阶段3：publish（正文流式生成）
                                        ── SSE: status / chunk / error / done
 ```
 
