@@ -18,9 +18,9 @@ import type { Logger } from "../core/utils/log";
 import { logger as defaultLogger } from "../core/utils/log";
 
 import { makeAsrTranscriptProvider } from "../infra/transcript/asr";
-import { YouTubeProvider } from "../infra/transcript/youtube";
+import { makeSubtitleProxyProvider } from "../infra/transcript/subtitle-proxy";
 import type { TranscriptResult } from "../infra/transcript/types";
-import { SubtitleFetchTransientError } from "../infra/transcript/errors";
+import { YouTubeProvider } from "../infra/transcript/youtube";
 import type { AsrProvider } from "../infra/asr/types";
 
 import type { Pricing } from "../domain/pricing";
@@ -37,6 +37,7 @@ export interface VideoPipelineDeps {
   credits: CreditsService;
   asrJobs: AsrJobsService;
   asr: AsrProvider | null;       // null 时表示当前部署未配 AI binding，跳过付费兜底
+  subtitleProxyUrl: string;
   logger?: Logger;
 }
 
@@ -94,6 +95,7 @@ export class VideoPipeline {
 
     const strategies: Array<FallbackStrategy<PipelineCtx, VideoPipelineOutput>> = [
       this.youtubeCaptionStrategy(),
+      this.subtitleProxyStrategy(),
     ];
     if (this.deps.asr) {
       strategies.push(this.paidAsrStrategy(this.deps.asr));
@@ -108,8 +110,7 @@ export class VideoPipeline {
       accept: (r) => r.transcript.subtitleLines >= MIN_USABLE_SUBTITLE_LINES,
       fatal: (e) =>
         e instanceof InsufficientCreditsError ||
-        e instanceof AuthRequiredError ||
-        e instanceof SubtitleFetchTransientError,
+        e instanceof AuthRequiredError,
     });
 
     if (!result) {
@@ -143,7 +144,25 @@ export class VideoPipeline {
     };
   }
 
-  // ============= 策略 2：付费 ASR =============
+  // ============= 策略 2：subtitle-proxy 免费字幕 =============
+  private subtitleProxyStrategy(): FallbackStrategy<PipelineCtx, VideoPipelineOutput> {
+    return {
+      id: "subtitle-proxy",
+      async run(ctx) {
+        const provider = makeSubtitleProxyProvider(ctx.deps.subtitleProxyUrl);
+        if (!provider.supports(ctx.url)) return null;
+        const transcript = await provider.extract(ctx.url, { signal: ctx.signal });
+        return {
+          transcript,
+          strategy: "subtitle-proxy",
+          cost: 0,
+          refId: null,
+        };
+      },
+    };
+  }
+
+  // ============= 策略 3：付费 ASR =============
   private paidAsrStrategy(asr: AsrProvider): FallbackStrategy<PipelineCtx, VideoPipelineOutput> {
     // inner + billed 均使用 AuthedPipelineCtx，hooks 内可安全访问 ctx.user（User，非 null）。
     const inner: FallbackStrategy<AuthedPipelineCtx, VideoPipelineOutput> = {

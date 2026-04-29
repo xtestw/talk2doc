@@ -11,6 +11,7 @@ PRICING_PER_MINUTE_CREDITS = "1"
 SIGNUP_BONUS_CREDITS = "0"
 TOPUP_PACKAGES_JSON = '[{"id":"starter","label":"入门 100 积分","cents":100,"credits":100,"currency":"usd"},{"id":"plus","label":"加量 500 积分","cents":400,"credits":500,"currency":"usd"},{"id":"pro","label":"专业 1500 积分","cents":1000,"credits":1500,"currency":"usd"}]'
 APP_BASE_URL = "https://talk2doc.xuwei8091.workers.dev"
+SUBTITLE_PROXY_URL = "https://ytpapi.cunovel.com"
 
 # === Cloudflare AI（Whisper 走这里） ===
 [ai]

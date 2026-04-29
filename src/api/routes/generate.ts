@@ -119,6 +119,7 @@ export const generate: Handler = withAuth(async (req, ctx) => {
       credits: ctx.services.credits,
       asrJobs: ctx.services.asrJobs,
       asr: ctx.services.asr,
+      subtitleProxyUrl: ctx.config.subtitleProxyUrl,
       logger: ctx.log,
     });
     job = {

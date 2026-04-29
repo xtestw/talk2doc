@@ -29,6 +29,7 @@ export interface AppConfig {
 
   // App
   appBaseUrl: string;
+  subtitleProxyUrl: string;
 
   // Pricing
   pricingPerMinuteCredits: number;
@@ -55,6 +56,7 @@ export interface RawEnv {
   GEMINI_MODEL?: string;
   DEFAULT_LLM_PROVIDER?: string;
   APP_BASE_URL?: string;
+  SUBTITLE_PROXY_URL?: string;
   PRICING_PER_MINUTE_CREDITS?: string;
   SIGNUP_BONUS_CREDITS?: string;
   TOPUP_PACKAGES_JSON?: string;
@@ -75,6 +77,7 @@ export function loadConfig(env: RawEnv): AppConfig {
     stripeWebhookSecret: str(env.STRIPE_WEBHOOK_SECRET),
 
     appBaseUrl: str(env.APP_BASE_URL, "http://localhost:8787"),
+    subtitleProxyUrl: str(env.SUBTITLE_PROXY_URL, "https://ytpapi.cunovel.com"),
 
     pricingPerMinuteCredits: int(env.PRICING_PER_MINUTE_CREDITS, 1),
     signupBonusCredits: nonNegativeInt(env.SIGNUP_BONUS_CREDITS, 0),
