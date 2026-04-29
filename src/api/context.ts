@@ -12,6 +12,7 @@ import { CreditsService } from "../domain/credits";
 import { BillingService } from "../domain/billing";
 import { UsersService } from "../domain/users";
 import { AsrJobsService } from "../domain/asr-jobs";
+import { ConversionsService } from "../domain/conversions";
 import { Pricing } from "../domain/pricing";
 import { makeCfWhisper } from "../infra/asr/cf-whisper";
 import type { AsrProvider } from "../infra/asr/types";
@@ -24,6 +25,7 @@ export interface Services {
   billing: BillingService;
   users: UsersService;
   asrJobs: AsrJobsService;
+  conversions: ConversionsService;
   asr: AsrProvider | null;
 }
 
@@ -52,6 +54,7 @@ export function buildContext(req: Request, env: RawEnv): ApiContext {
     billing: new BillingService(db),
     users: new UsersService(db, config.signupBonusCredits),
     asrJobs: new AsrJobsService(db),
+    conversions: new ConversionsService(db),
     asr: env.AI ? makeCfWhisper({ ai: env.AI }) : null,
   };
 

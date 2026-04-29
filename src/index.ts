@@ -7,6 +7,7 @@
 
 import * as auth from "./api/routes/auth";
 import * as billing from "./api/routes/billing";
+import * as conversions from "./api/routes/conversions";
 import * as pricing from "./api/routes/pricing";
 import { generate } from "./api/routes/generate";
 import { buildContext } from "./api/context";
@@ -16,6 +17,7 @@ import { GET, POST, matchRoute, type Route } from "./api/router";
 import type { RawEnv } from "./infra/config";
 import { INDEX_HTML } from "./web/index";
 import { ORDERS_HTML } from "./web/orders";
+import { PREVIEW_HTML } from "./web/preview";
 
 const serveIndex = (): Response =>
   new Response(INDEX_HTML, {
@@ -33,9 +35,18 @@ const serveOrders = (): Response =>
     },
   });
 
+const servePreview = (): Response =>
+  new Response(PREVIEW_HTML, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-cache",
+    },
+  });
+
 const routes: Route[] = [
   GET("/", serveIndex),
   GET("/orders", serveOrders),
+  GET("/preview", servePreview),
 
   GET("/api/auth/me", auth.me),
   GET("/api/auth/google/start", auth.startGoogle),
@@ -46,6 +57,9 @@ const routes: Route[] = [
   POST("/api/billing/checkout", billing.checkout),
   POST("/api/billing/stripe-webhook", billing.webhook),
   GET("/api/billing/history", billing.history),
+  GET("/api/conversions/history", conversions.history),
+  GET("/api/conversions/detail", conversions.detail),
+  POST("/api/conversions/delete", conversions.remove),
 
   POST("/api/generate", generate),
 ];

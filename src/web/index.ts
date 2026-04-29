@@ -26,6 +26,7 @@ const BODY = /* html */ `
   <div class="topbar-inner">
     <div class="brand">Talk2Doc<span class="dot"></span><span class="brand-sub">把对话变成可读文本</span></div>
     <div class="spacer"></div>
+    <a class="ghost-btn" href="/orders">历史记录</a>
     ${AUTH_BAR_HTML}
   </div>
 </header>
@@ -38,7 +39,8 @@ const BODY = /* html */ `
         <p class="hero-subtitle">支持 Gemini / DeepSeek，一键生成中文文章。</p>
       </div>
       <div class="input-row">
-        <input id="url" type="url" required placeholder="粘贴一个有字幕的 YouTube 链接，例如 https://youtube.com/watch?v=..." />
+        <input id="url" type="url" list="recent-url-list" required placeholder="粘贴一个有字幕的 YouTube 链接，例如 https://youtube.com/watch?v=..." />
+        <datalist id="recent-url-list"></datalist>
         <button id="submit" type="submit" class="primary">生成</button>
       </div>
       <fieldset class="model-switch" aria-label="模型选择">
@@ -57,7 +59,12 @@ const BODY = /* html */ `
 
   <div id="status" class="status">
     <span id="status-text" aria-live="polite"></span>
-    <button id="download-subtitle" class="secondary" type="button" hidden>下载字幕</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button id="download-subtitle" class="secondary" type="button" hidden>下载字幕</button>
+      <button id="download-md" class="secondary" type="button" hidden>下载 MD</button>
+      <button id="download-html" class="secondary" type="button" hidden>下载 HTML</button>
+      <button id="download-pdf" class="secondary" type="button" hidden>下载 PDF</button>
+    </div>
   </div>
   <div id="meta" class="meta"></div>
   <article id="article-publish" class="empty"></article>

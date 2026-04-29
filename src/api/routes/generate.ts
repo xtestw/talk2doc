@@ -12,6 +12,7 @@ import { InsufficientCreditsError } from "../../domain/credits";
 import { AuthRequiredError } from "../../domain/errors";
 import { selectAdapter } from "../../infra/llm";
 import { SubtitleFetchTransientError } from "../../infra/transcript/errors";
+import { selectProvider } from "../../infra/transcript";
 import { withAuth } from "../middleware/auth";
 import { encodeEventWithId, type SseKind } from "../sse";
 import { err } from "../respond";
@@ -93,6 +94,11 @@ export const generate: Handler = withAuth(async (req, ctx) => {
   if (!body || !body.url?.trim()) {
     return err(400, "bad_request", "请求体缺少 url 字段");
   }
+  const url = body.url.trim();
+  const provider = selectProvider(url);
+  if (!provider) {
+    return err(400, "unsupported_url", "请输入可解析的视频链接（例如 YouTube watch 链接），而不是频道/播放列表页");
+  }
   const resumeJobId = body.jobId?.trim();
   const fromSeq = Number.isFinite(body.fromSeq) ? Number(body.fromSeq) : 0;
 
@@ -165,6 +171,11 @@ async function runJob(
   },
 ): Promise<void> {
   const { req, ctx, body, llm, llmKey, model, baseUrl, pipeline } = deps;
+  const persistedId = ctx.currentUser ? job.id : "";
+  let subtitleText = "";
+  let articleMarkdown = "";
+  let agentFailed = false;
+  let agentErrorMessage = "";
   const log = ctx.log.with({
     component: "generate-route",
     path: "/api/generate",
@@ -172,6 +183,15 @@ async function runJob(
     jobId: job.id,
   });
   try {
+    if (ctx.currentUser) {
+      await ctx.services.conversions.createPending({
+        id: persistedId,
+        userId: ctx.currentUser.id,
+        sourceUrl: body.url!,
+        provider: llm.id,
+        model: model || llm.defaultModel,
+      });
+    }
     log.info("pipeline_start", {
       url: body.url,
       userId: ctx.currentUser?.id ?? "anon",
@@ -200,6 +220,7 @@ async function runJob(
     if (transcript.frames.length === 0) {
       publish(job, "status", "无关键帧 sprite，已退化为纯字幕模式");
     }
+    subtitleText = transcript.subtitle;
     publish(job, "subtitle", transcript.subtitle);
     for await (const ev of ArticleAgent.run({
       transcript,
@@ -209,11 +230,37 @@ async function runJob(
       baseUrl,
       signal: req.signal,
     })) {
-      if (ev.kind === "chunk") publish(job, "chunk", ev.text);
+      if (ev.kind === "chunk") {
+        articleMarkdown += ev.text;
+        publish(job, "chunk", ev.text);
+      }
       else if (ev.kind === "status") publish(job, "status", ev.message);
       else if (ev.kind === "error") {
+        agentFailed = true;
+        agentErrorMessage = ev.message;
         publish(job, "error", ev.message);
         break;
+      }
+    }
+    if (ctx.currentUser) {
+      if (agentFailed) {
+        await ctx.services.conversions.markFailed(
+          persistedId,
+          agentErrorMessage || "article_generation_failed",
+        ).catch((err) => {
+          log.warn("conversion_mark_failed_error", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      } else {
+        await ctx.services.conversions.markSuccess(persistedId, {
+          subtitleText,
+          articleMarkdown,
+        }).catch((err) => {
+          log.warn("conversion_mark_success_error", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       }
     }
   } catch (e) {
@@ -241,6 +288,16 @@ async function runJob(
       }));
     } else {
       publish(job, "error", e instanceof Error ? e.message : String(e));
+    }
+    if (ctx.currentUser) {
+      await ctx.services.conversions.markFailed(
+        persistedId,
+        e instanceof Error ? e.message : String(e),
+      ).catch((err) => {
+        log.warn("conversion_mark_failed_error", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     }
   } finally {
     publish(job, "done", "");

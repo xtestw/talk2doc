@@ -30,6 +30,10 @@ export const APP_SCRIPT = /* javascript */ `
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   };
+  const LS_LOCAL_HISTORY = "t2d:localHistory";
+  const LS_RECENT_URLS = "t2d:recentUrls";
+  const LOCAL_HISTORY_LIMIT = 30;
+  const RECENT_URL_LIMIT = 10;
 
   // ---------- Auth ----------
   let me = null; // { id, email, name, picture, credits } | null
@@ -209,16 +213,22 @@ export const APP_SCRIPT = /* javascript */ `
   // ---------- Generation ----------
   const form = $("#form");
   const urlIn = $("#url");
+  const recentUrlList = $("#recent-url-list");
   const submit = $("#submit");
   const modelSwitch = $(".model-switch");
   const statusWrap = $("#status");
   const statusEl = $("#status-text");
   const metaEl = $("#meta");
   const downloadSubtitleBtn = $("#download-subtitle");
+  const downloadMdBtn = $("#download-md");
+  const downloadHtmlBtn = $("#download-html");
+  const downloadPdfBtn = $("#download-pdf");
   const articlePublish = $("#article-publish");
   let subtitleText = "";
   let currentJobId = "";
   let lastSeq = 0;
+  let streamFailed = false;
+  let streamErrorMessage = "";
 
   // 高级设置回填
   const providerInputs = Array.from(document.querySelectorAll('input[name="provider"]'));
@@ -233,6 +243,85 @@ export const APP_SCRIPT = /* javascript */ `
   function selectedProvider() {
     const checked = providerInputs.find((el) => el.checked);
     return checked ? checked.value : "gemini";
+  }
+
+  function fileSafeTs() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return [
+      d.getFullYear(),
+      pad(d.getMonth() + 1),
+      pad(d.getDate()),
+      "-",
+      pad(d.getHours()),
+      pad(d.getMinutes()),
+      pad(d.getSeconds()),
+    ].join("");
+  }
+
+  function downloadTextFile(filename, content, mimeType) {
+    const blob = new Blob([String(content || "")], { type: mimeType || "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function updateArticleDownloadVisibility() {
+    const ready = Boolean(buffer && buffer.trim());
+    if (downloadMdBtn) downloadMdBtn.hidden = !ready;
+    if (downloadHtmlBtn) downloadHtmlBtn.hidden = !ready;
+    if (downloadPdfBtn) downloadPdfBtn.hidden = !ready;
+  }
+
+  function loadRecentUrls() {
+    const raw = LS.get(LS_RECENT_URLS, "[]");
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.map((x) => String(x || "")).filter(Boolean);
+    } catch {}
+    return [];
+  }
+
+  function saveRecentUrl(url) {
+    const u = String(url || "").trim();
+    if (!u) return;
+    const next = [u, ...loadRecentUrls().filter((x) => x !== u)].slice(0, RECENT_URL_LIMIT);
+    LS.set(LS_RECENT_URLS, JSON.stringify(next));
+    renderRecentUrlOptions(next);
+  }
+
+  function renderRecentUrlOptions(list) {
+    if (!recentUrlList) return;
+    recentUrlList.innerHTML = (list || []).map((u) => {
+      const v = String(u || "").replace(/[&<>"']/g, (c) => {
+        if (c === "&") return "&amp;";
+        if (c === "<") return "&lt;";
+        if (c === ">") return "&gt;";
+        if (c === '"') return "&quot;";
+        return "&#39;";
+      });
+      return "<option value='" + v + "'></option>";
+    }).join("");
+  }
+
+  function getLocalHistory() {
+    const raw = LS.get(LS_LOCAL_HISTORY, "[]");
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr;
+    } catch {}
+    return [];
+  }
+
+  function pushLocalHistory(record) {
+    const next = [record, ...getLocalHistory()].slice(0, LOCAL_HISTORY_LIMIT);
+    LS.set(LS_LOCAL_HISTORY, JSON.stringify(next));
+    showToast("已保存到本地历史，可在“历史记录”查看");
   }
 
   let abortCtrl = null;
@@ -259,6 +348,7 @@ export const APP_SCRIPT = /* javascript */ `
       hiddenRenderTimer = null;
       articlePublish.innerHTML = md(buffer);
       articlePublish.classList.toggle("empty", !buffer.trim());
+      updateArticleDownloadVisibility();
     };
 
     // 页面切到后台时 rAF 会被降频/暂停；改用定时器保证 SSE 内容持续刷新。
@@ -337,8 +427,12 @@ export const APP_SCRIPT = /* javascript */ `
       }
       statusEl.textContent = "出错：" + (typeof data === "string" ? data : JSON.stringify(data));
       showToast("生成失败");
+      streamFailed = true;
+      streamErrorMessage = typeof data === "string" ? data : JSON.stringify(data);
     } else if (kind === "done") {
-      // 不再 setBusy(false)，由 done 事件统一处理
+      if (!streamFailed) {
+        statusEl.textContent = "正文生成完成，可下载文档或在历史记录中查看。";
+      }
     }
   }
 
@@ -436,26 +530,70 @@ export const APP_SCRIPT = /* javascript */ `
     subtitleText = "";
     currentJobId = "";
     lastSeq = 0;
+    streamFailed = false;
+    streamErrorMessage = "";
     if (downloadSubtitleBtn) downloadSubtitleBtn.hidden = true;
     scheduleRender();
+    updateArticleDownloadVisibility();
     setBusy(true);
     setStreaming(true);
     statusEl.textContent = "正在准备…";
     metaEl.innerHTML = "";
 
     try {
+      const provider = selectedProvider();
       await streamGenerate({
         url,
-        provider: selectedProvider(),
+        provider,
       });
+      saveRecentUrl(url);
+      if (!me && !streamFailed) {
+        pushLocalHistory({
+          id: "local-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+          sourceUrl: url,
+          provider,
+          model: "",
+          status: "success",
+          subtitleText,
+          articleMarkdown: buffer,
+          errorMessage: null,
+          createdAt: Date.now(),
+        });
+      } else if (!me && streamFailed) {
+        pushLocalHistory({
+          id: "local-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+          sourceUrl: url,
+          provider,
+          model: "",
+          status: "failed",
+          subtitleText,
+          articleMarkdown: buffer,
+          errorMessage: streamErrorMessage || "stream_failed",
+          createdAt: Date.now(),
+        });
+      }
       // 成功完成后刷新余额
       await refreshMe();
     } catch (e) {
+      const provider = selectedProvider();
       if (e && e.name === "AbortError") {
         statusEl.textContent = "已中止";
       } else {
         statusEl.textContent = "出错：" + (e && e.message || e);
         showToast("请求失败");
+        if (!me) {
+          pushLocalHistory({
+            id: "local-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+            sourceUrl: url,
+            provider,
+            model: "",
+            status: "failed",
+            subtitleText,
+            articleMarkdown: buffer,
+            errorMessage: String((e && e.message) || e || "unknown_error"),
+            createdAt: Date.now(),
+          });
+        }
       }
     } finally {
       setBusy(false);
@@ -516,6 +654,51 @@ export const APP_SCRIPT = /* javascript */ `
       URL.revokeObjectURL(url);
     });
   }
+  if (downloadMdBtn) {
+    downloadMdBtn.addEventListener("click", () => {
+      if (!buffer.trim()) return;
+      downloadTextFile("talk2doc-" + fileSafeTs() + ".md", buffer, "text/markdown;charset=utf-8");
+    });
+  }
+  if (downloadHtmlBtn) {
+    downloadHtmlBtn.addEventListener("click", () => {
+      if (!buffer.trim()) return;
+      const html = [
+        "<!doctype html>",
+        "<html lang='zh-CN'><head><meta charset='UTF-8' />",
+        "<meta name='viewport' content='width=device-width, initial-scale=1.0' />",
+        "<title>Talk2Doc 导出</title>",
+        "<style>body{max-width:860px;margin:24px auto;padding:0 16px;font:16px/1.7 -apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;color:#1a1a1a} h1,h2,h3{line-height:1.4} pre{white-space:pre-wrap}</style>",
+        "</head><body>",
+        md(buffer),
+        "</body></html>",
+      ].join("");
+      downloadTextFile("talk2doc-" + fileSafeTs() + ".html", html, "text/html;charset=utf-8");
+    });
+  }
+  if (downloadPdfBtn) {
+    downloadPdfBtn.addEventListener("click", () => {
+      if (!buffer.trim()) return;
+      const w = window.open("", "_blank");
+      if (!w) {
+        showToast("请允许弹窗后再试");
+        return;
+      }
+      const html = [
+        "<!doctype html>",
+        "<html lang='zh-CN'><head><meta charset='UTF-8' />",
+        "<title>Talk2Doc PDF</title>",
+        "<style>body{max-width:860px;margin:24px auto;padding:0 16px;font:16px/1.7 -apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;color:#1a1a1a} h1,h2,h3{line-height:1.4} @media print{body{margin:0 auto;padding:0}}</style>",
+        "</head><body>",
+        md(buffer),
+        "</body></html>",
+      ].join("");
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => w.print(), 120);
+    });
+  }
 
   // 充值结果回流
   const params = new URLSearchParams(location.search);
@@ -525,5 +708,7 @@ export const APP_SCRIPT = /* javascript */ `
   // 初始化
   bindMenu();
   refreshMe();
+  renderRecentUrlOptions(loadRecentUrls());
+  updateArticleDownloadVisibility();
 })();
 `;

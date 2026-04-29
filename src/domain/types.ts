@@ -55,3 +55,19 @@ export interface AsrJob {
   createdAt: number;
   finishedAt: number | null;
 }
+
+export type ConversionStatus = "pending" | "success" | "failed";
+
+export interface ConversionRecord {
+  id: string;
+  userId: string;
+  sourceUrl: string;
+  provider: string;
+  model: string;
+  status: ConversionStatus;
+  subtitleText: string;
+  articleMarkdown: string;
+  errorMessage: string | null;
+  createdAt: number;
+  updatedAt: number;
+}

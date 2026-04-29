@@ -24,7 +24,9 @@ export function sseEventSplitter(): TransformStream<string, string> {
   let buf = "";
   return new TransformStream({
     transform(chunk, ctrl) {
-      buf += chunk;
+      // 兼容上游用 CRLF（\r\n）分隔 SSE 行；统一成 LF 后再按 \n\n 拆帧。
+      // 直接去掉 \r 也能处理跨 chunk 的 \r + \n 边界。
+      buf += chunk.replace(/\r/g, "");
       let idx: number;
       while ((idx = buf.indexOf("\n\n")) !== -1) {
         const evt = buf.slice(0, idx);
